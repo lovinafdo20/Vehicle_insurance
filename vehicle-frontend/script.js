@@ -98,7 +98,7 @@ async function sendRequest(path, options) {
       ...options
     });
   } catch (_error) {
-    throw new Error("Cannot reach the backend API. Make sure the DriveSure backend is running on http://localhost:3001.");
+    throw new Error("Cannot reach the backend API. Make sure the DriveSure backend is running on https://drive-sure-5gwr.onrender.com.");
   }
 
   const contentType = response.headers.get("content-type") || "";
@@ -108,7 +108,7 @@ async function sendRequest(path, options) {
     const looksLikeHtml = text.trim().startsWith("<!DOCTYPE") || text.trim().startsWith("<html");
 
     if (looksLikeHtml) {
-      throw new Error("The frontend reached a page instead of the backend API. Make sure the DriveSure backend is running on http://localhost:3001.");
+      throw new Error("The frontend reached a page instead of the backend API. Make sure the DriveSure backend is running on https://drive-sure-5gwr.onrender.com.");
     }
 
     throw new Error("The backend returned a non-JSON response.");
