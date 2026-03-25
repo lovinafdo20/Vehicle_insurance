@@ -1,4 +1,4 @@
-const API_BASE = "https://drive-sure-5gwr.onrender.com";
+const API_BASE = "http://localhost:3001";
 
 function saveSession(user) {
   localStorage.setItem("user", JSON.stringify(user));
@@ -83,7 +83,7 @@ function updateDashboardSummary({ cars = [], policies = [], payments = [] }) {
 
   summaryLastPaymentDate.textContent = latestPayment ? formatDateLabel(latestPayment.payment_date) : "None";
   summaryLastPaymentText.textContent = latestPayment
-    ? `${latestPayment.payment_title} was the most recent payment activity.`
+    ? `${latestPayment.plan_name ? `${latestPayment.plan_name} payment` : `Payment #${latestPayment.payment_id}`} was the most recent payment activity.`
     : "Your latest billing activity will be shown here.";
 }
 
@@ -98,7 +98,7 @@ async function sendRequest(path, options) {
       ...options
     });
   } catch (_error) {
-    throw new Error("Cannot reach the backend API. Make sure the DriveSure backend is running on https://drive-sure-5gwr.onrender.com.");
+    throw new Error("Cannot reach the backend API. Make sure the DriveSure backend is running on http://localhost:3001.");
   }
 
   const contentType = response.headers.get("content-type") || "";
@@ -108,7 +108,7 @@ async function sendRequest(path, options) {
     const looksLikeHtml = text.trim().startsWith("<!DOCTYPE") || text.trim().startsWith("<html");
 
     if (looksLikeHtml) {
-      throw new Error("The frontend reached a page instead of the backend API. Make sure the DriveSure backend is running on https://drive-sure-5gwr.onrender.com.");
+      throw new Error("The frontend reached a page instead of the backend API. Make sure the DriveSure backend is running on http://localhost:3001.");
     }
 
     throw new Error("The backend returned a non-JSON response.");
@@ -182,10 +182,10 @@ document.getElementById("carForm")?.addEventListener("submit", async (e) => {
   const payload = {
     customer_id: user.customer_id,
     vehicle_type: document.getElementById("vehicleType").value,
-    model_no: document.getElementById("model").value.trim(),
-    brand: document.getElementById("brand").value.trim(),
-    color: document.getElementById("color").value.trim(),
-    price: document.getElementById("price").value
+    make: document.getElementById("make").value.trim(),
+    model: document.getElementById("model").value.trim(),
+    year: document.getElementById("year").value,
+    plate_no: document.getElementById("plateNo").value.trim()
   };
 
   try {
@@ -283,7 +283,7 @@ async function loadPolicyVehicles() {
     cars.forEach((car) => {
       const option = document.createElement("option");
       option.value = car.car_id;
-      option.textContent = `${car.vehicle_type || "Vehicle"} - ${car.brand} ${car.model_no} (${car.color})`;
+      option.textContent = `${car.vehicle_type || "Vehicle"} - ${car.make} ${car.model} (${car.plate_no})`;
       vehicleSelect.appendChild(option);
     });
   } catch (error) {
@@ -335,7 +335,7 @@ async function loadPaymentPolicies() {
     policies.forEach((policy) => {
       const option = document.createElement("option");
       option.value = policy.policy_id;
-      option.textContent = `${policy.plan_name}${policy.brand && policy.model_no ? ` - ${policy.brand} ${policy.model_no}` : ""}`;
+      option.textContent = `${policy.plan_name}${policy.make && policy.model ? ` - ${policy.make} ${policy.model}` : ""}`;
       policySelect.appendChild(option);
     });
   } catch (error) {
@@ -362,12 +362,10 @@ document.querySelectorAll(".payment-action-btn").forEach((button) => {
     }
 
     const payload = {
-      customer_id: user.customer_id,
       policy_id: policySelect.value,
-      payment_title: button.dataset.paymentTitle,
       amount: button.dataset.amount,
       payment_method: button.dataset.paymentMethod,
-      payment_status: button.dataset.paymentStatus,
+      status: button.dataset.paymentStatus,
       payment_date: new Date().toISOString().slice(0, 19).replace("T", " ")
     };
 
@@ -422,12 +420,12 @@ async function loadDashboardVehicles() {
       const card = document.createElement("article");
       card.className = "vehicle-item";
       card.innerHTML = `
-        <h3>${car.vehicle_type || "Vehicle"} - ${car.brand} ${car.model_no}</h3>
+        <h3>${car.vehicle_type || "Vehicle"} - ${car.make} ${car.model}</h3>
         <p class="helper-text">Registered under customer ID ${car.customer_id}</p>
         <div class="vehicle-meta">
           <span><strong>Type:</strong> ${car.vehicle_type || "Vehicle"}</span>
-          <span><strong>Color:</strong> ${car.color}</span>
-          <span><strong>Declared value:</strong> Rs. ${Number(car.price).toLocaleString("en-IN")}</span>
+          <span><strong>Year:</strong> ${car.year}</span>
+          <span><strong>Plate number:</strong> ${car.plate_no}</span>
         </div>
       `;
       vehicleGrid.appendChild(card);
@@ -482,9 +480,9 @@ async function loadDashboardPolicies() {
       card.className = "policy-item";
       card.innerHTML = `
         <h3>${policy.plan_name}</h3>
-        <p class="helper-text">${policy.coverage_type} coverage for ${policy.brand && policy.model_no ? `${policy.brand} ${policy.model_no}` : `vehicle #${policy.car_id}`}</p>
+        <p class="helper-text">${policy.coverage_type} coverage for ${policy.make && policy.model ? `${policy.make} ${policy.model}` : `vehicle #${policy.car_id}`}</p>
         <div class="policy-meta">
-          <span><strong>Linked vehicle:</strong> ${policy.brand && policy.model_no ? `${policy.brand} ${policy.model_no}${policy.color ? ` (${policy.color})` : ""}` : `Vehicle #${policy.car_id}`}</span>
+          <span><strong>Linked vehicle:</strong> ${policy.make && policy.model ? `${policy.make} ${policy.model}${policy.plate_no ? ` (${policy.plate_no})` : ""}` : `Vehicle #${policy.car_id}`}</span>
           <span><strong>Premium:</strong> Rs. ${Number(policy.premium_amount).toLocaleString("en-IN")} / ${String(policy.billing_cycle || "Yearly").toLowerCase()}</span>
           <span><strong>Status:</strong> ${policy.status || "Active"}</span>
         </div>
@@ -540,12 +538,12 @@ async function loadDashboardPayments() {
       const card = document.createElement("article");
       card.className = "payment-item";
       card.innerHTML = `
-        <h3>${payment.payment_title}</h3>
+        <h3>${payment.plan_name ? `${payment.plan_name} payment` : `Payment #${payment.payment_id}`}</h3>
         <p class="helper-text">${payment.plan_name ? `${payment.plan_name} policy` : "Policy payment"} via ${payment.payment_method}</p>
         <div class="payment-meta">
           <span><strong>Linked policy:</strong> ${payment.plan_name ? `${payment.plan_name}${payment.coverage_type ? ` (${payment.coverage_type})` : ""}` : `Policy #${payment.policy_id}`}</span>
           <span><strong>Amount:</strong> Rs. ${Number(payment.amount).toLocaleString("en-IN")}</span>
-          <span><strong>Status:</strong> ${payment.payment_status || "Paid"}</span>
+          <span><strong>Status:</strong> ${payment.status || "Paid"}</span>
           <span><strong>Date:</strong> ${String(payment.payment_date).slice(0, 10)}</span>
         </div>
       `;
