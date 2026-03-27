@@ -1,84 +1,100 @@
-const express = require("express");
-const cors = require("cors");
-const app = express();
+// 1. UPDATE THIS URL to your actual Render service link
+const API_BASE = "https://drive-sure-5gwr.onrender.com"; 
 
-const PORT = process.env.PORT || 3001;
+// --- AUTHENTICATION LOGIC ---
+const loginForm = document.getElementById('loginForm');
+if (loginForm) {
+    loginForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
 
-app.use(cors());
-app.use(express.json());
+        try {
+            const response = await fetch(`${API_BASE}/auth/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password })
+            });
 
-// --- MOCK DATABASE ---
-let users = [];
-let vehicles = []; 
-let policies = [];
-let payments = [];
+            const data = await response.json();
+            if (response.ok) {
+                // Store user data in localStorage for the dashboard
+                localStorage.setItem('user', JSON.stringify(data.user));
+                window.location.href = 'dashboard.html';
+            } else {
+                alert(data.message || "Login failed");
+            }
+        } catch (err) {
+            alert("Cannot reach the backend API. Is your Render server awake?");
+        }
+    });
+}
 
-// --- HEALTH CHECK ---
-app.get("/health", (req, res) => res.json({ ok: true, message: "DriveSure API is live!" }));
+// --- DASHBOARD & VEHICLE LOGIC ---
+const carForm = document.getElementById('carForm');
+if (carForm) {
+    carForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const user = JSON.parse(localStorage.getItem('user'));
+        
+        const vehicleData = {
+            customer_id: user.customer_id, // Matches your SQL column
+            vehicle_type: document.getElementById('vehicleType').value,
+            make: document.getElementById('make').value,
+            model: document.getElementById('model').value,
+            year: document.getElementById('year').value,
+            plate_no: document.getElementById('plateNo').value
+        };
 
-// --- AUTHENTICATION ---
-app.post("/auth/register", (req, res) => {
-    const { name, email, password } = req.body;
-    const user = { customer_id: Date.now(), name, email };
-    users.push({ ...user, password });
-    res.status(201).json({ message: "User registered successfully!", user });
-});
+        try {
+            const response = await fetch(`${API_BASE}/vehicles`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(vehicleData)
+            });
 
-app.post("/auth/login", (req, res) => {
-    const { email, password } = req.body;
-    const user = users.find(u => u.email === email && u.password === password);
-    if (user) {
-        res.json({ message: "Login successful!", user: { customer_id: user.customer_id, name: user.name } });
-    } else {
-        res.status(401).json({ message: "Invalid email or password." });
+            if (response.ok) {
+                alert("Vehicle registered successfully!");
+                location.reload(); // Refresh to show new vehicle
+            }
+        } catch (err) {
+            console.error("Error saving vehicle:", err);
+        }
+    });
+}
+
+// --- DATA LOADING ---
+async function loadDashboardData() {
+    const user = JSON.parse(localStorage.getItem('user'));
+    if (!user) {
+        window.location.href = 'index.html';
+        return;
     }
-});
 
-// --- VEHICLE MANAGEMENT ---
-app.post("/vehicles", (req, res) => {
-    // Matches script.js: make, model, year, plate_no
-    const newVehicle = { ...req.body, car_id: Date.now() };
-    vehicles.push(newVehicle);
-    res.status(201).json({ message: "Vehicle added successfully!", car: newVehicle });
-});
+    // Display user name
+    const welcomeMsg = document.getElementById('welcomeMessage');
+    if (welcomeMsg) welcomeMsg.innerText = `Welcome, ${user.name}!`;
 
-app.get("/vehicles/:id", (req, res) => {
-    const userId = parseInt(req.params.id);
-    const userVehicles = vehicles.filter(v => Number(v.customer_id) === userId);
-    res.json({ cars: userVehicles });
-});
+    try {
+        // Fetch vehicles from MySQL via Render
+        const res = await fetch(`${API_BASE}/vehicles/${user.customer_id}`);
+        const data = await res.json();
+        
+        const vehicleList = document.getElementById('vehicleList');
+        if (vehicleList && data.cars) {
+            vehicleList.innerHTML = data.cars.map(car => `
+                <div class="card">
+                    <h4>${car.year} ${car.make} ${car.model}</h4>
+                    <p>Plate: ${car.plate_no}</p>
+                </div>
+            `).join('');
+        }
+    } catch (err) {
+        console.error("Failed to load data from Render:", err);
+    }
+}
 
-// --- POLICY MANAGEMENT ---
-app.post("/policies", (req, res) => {
-    const newPolicy = { ...req.body, policy_id: Date.now() };
-    policies.push(newPolicy);
-    res.status(201).json({ message: "Policy linked successfully!", policy: newPolicy });
-});
-
-app.get("/policies/:id", (req, res) => {
-    const userId = parseInt(req.params.id);
-    const userPolicies = policies.map(p => {
-        const vehicle = vehicles.find(v => v.car_id == p.car_id);
-        // Merging vehicle details for the frontend display
-        return vehicle ? { ...p, make: vehicle.make, model: vehicle.model, plate_no: vehicle.plate_no } : p;
-    }).filter(p => Number(p.customer_id) === userId);
-    res.json({ policies: userPolicies });
-});
-
-// --- PAYMENT MANAGEMENT ---
-app.post("/payments", (req, res) => {
-    const newPayment = { ...req.body, payment_id: Date.now() };
-    payments.push(newPayment);
-    res.status(201).json({ message: "Payment recorded!", payment: newPayment });
-});
-
-app.get("/payments/:id", (req, res) => {
-    const userId = parseInt(req.params.id);
-    const userPayments = payments.map(pay => {
-        const policy = policies.find(p => p.policy_id == pay.policy_id);
-        return policy ? { ...pay, plan_name: policy.plan_name, coverage_type: policy.coverage_type } : pay;
-    }).filter(pay => Number(pay.customer_id) === userId);
-    res.json({ payments: userPayments });
-});
-
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+// Initialize if on dashboard
+if (window.location.pathname.includes('dashboard')) {
+    loadDashboardData();
+}
