@@ -98,3 +98,9 @@ async function loadDashboardData() {
 if (window.location.pathname.includes('dashboard')) {
     loadDashboardData();
 }
+// A safer way to initialize
+document.addEventListener('DOMContentLoaded', () => {
+    if (document.getElementById('vehicleList')) {
+        loadDashboardData();
+    }
+});
